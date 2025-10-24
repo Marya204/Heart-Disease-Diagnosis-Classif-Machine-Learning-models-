@@ -1,0 +1,61 @@
+from flask import Flask, render_template_string, request
+from pyngrok import ngrok
+import joblib
+import pandas as pd
+
+# Charge ton modèle
+model = joblib.load('model/heart_model.pkl')
+
+app = Flask(__name__)
+
+html = """
+<!DOCTYPE html>
+<html>
+<head><title>Prédiction Maladie Cardiaque</title></head>
+<body>
+<h2>Formulaire de prédiction</h2>
+<form action="/predict" method="POST">
+    {% for name in feature_names %}
+      {{ name }}: 
+      <input type="text" 
+           name="feature{{ loop.index }}" 
+           required
+           value="{{ filled_values['feature' + loop.index|string] if filled_values is defined else '' }}">
+      <br><br>
+    {% endfor %}
+
+    <input type="submit" value="Prédire">
+</form>
+
+{% if prediction is defined %}
+    <h3>Résultat : {{ prediction }}</h3>
+{% else %}
+    <h3>Pas encore de prédiction.</h3>
+{% endif %}
+
+</body>
+</html>
+"""
+
+feature_names = ['Age','Sex','ChestPainType','RestingBP','Cholesterol','FastingBS','RestingECG','MaxHR','ExerciseAngina','Oldpeak','ST_Slope']  # liste des noms des features
+
+@app.route('/', methods=['GET'])
+def home():
+    return render_template_string(html, feature_names=feature_names)
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    features = [float(request.form[f'feature{i}']) for i in range(1, 12)]
+    df_features = pd.DataFrame([features], columns=feature_names)
+    prediction = model.predict(df_features)[0]
+    print("Prediction:", prediction)
+    filled_values = {f'feature{i}': features[i-1] for i in range(1, 12)}
+
+    return render_template_string(html, feature_names=feature_names, prediction=prediction,filled_values=filled_values)
+
+# Lancement de Flask + ngrok
+port = 5000
+public_url = ngrok.connect(port).public_url
+print(f" * ngrok tunnel URL: {public_url}")
+
+app.run(port=port)
